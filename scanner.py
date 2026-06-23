@@ -37,8 +37,8 @@ def scan_directory(directory):
     for root, _, files in os.walk(directory):
         for file in files:
             filepath = os.path.join(root, file)
-            # Evitar escanear el propio directorio .git
-            if '.git' in filepath:
+            # Evitar escanear el propio directorio .git y el README.md (para evitar falsos positivos)
+            if '.git' in filepath or file == 'README.md':
                 continue
                 
             is_infected, threat = scan_file(filepath)
