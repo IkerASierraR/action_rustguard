@@ -1,6 +1,6 @@
 import os
 import sys
-from scanner import scan_directory
+from scanner import analizar_archivo
 
 def main():
     # Capturar la variable de entorno de GitHub Actions
@@ -15,20 +15,28 @@ def main():
     print(f"==================================================")
     print(f"[+] Directorio objetivo: {workspace}\n")
     
-    # Ejecutar el escáner
-    infected_files = scan_directory(workspace)
+    # Recorrer el directorio y usar analizar_archivo
+    archivos_infectados = []
+    for root, _, files in os.walk(workspace):
+        for file in files:
+            filepath = os.path.join(root, file)
+            # Evitar escanear el propio directorio .git y README.md
+            if '.git' in filepath or file == 'README.md':
+                continue
+                
+            if analizar_archivo(filepath):
+                archivos_infectados.append(filepath)
     
-    if infected_files:
-        print("\n[!] AMENAZAS DETECTADAS [!]")
+    if archivos_infectados:
+        print("\n🚨 [AMENAZA DETECTADA] 🚨")
         print("--------------------------------------------------")
-        for filepath, threat in infected_files:
+        for filepath in archivos_infectados:
             # Imprimir la ruta relativa para facilitar la lectura
             rel_path = os.path.relpath(filepath, workspace)
             print(f"[X] {rel_path}")
-            print(f"   -> Firma identificada: {threat}")
         
         print("\n==================================================")
-        print(f"[X] RESULTADO: FALLO. {len(infected_files)} archivo(s) infectado(s) encontrado(s).")
+        print(f"[X] RESULTADO: FALLO. {len(archivos_infectados)} archivo(s) infectado(s) encontrado(s).")
         print("==================================================")
         # Exit Code 1 para fallar el pipeline
         sys.exit(1)
