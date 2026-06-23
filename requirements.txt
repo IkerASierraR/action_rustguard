@@ -1,0 +1,2 @@
+# No hay dependencias externas por ahora, ya que usamos módulos estándar de Python
+# (os, sys, re). Se deja listo por si en el futuro se añade yara-python u otras.

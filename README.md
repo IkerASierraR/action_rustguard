@@ -1,76 +1,47 @@
-# RustGuard Antivirus 🛡️
+# DevSecOps Antivirus Action 🛡️
 
-RustGuard es una suite de ciberseguridad open-source ultraligera de escritorio, orientada al consumidor final. Construida con una base sólida que acopla tecnologías web ultra-rápidas (React, Vite, Tailwind CSS) y un motor interno backend mediante Electron (Node.js). Este producto en su núcleo envuelve e invoca rutinas del robusto motor de código abierto **ClamAV**.
+![Version](https://img.shields.io/badge/version-1.0-blue)
+![Docker](https://img.shields.io/badge/runs--on-docker-green)
 
-## Características Principales ✨
+Esta GitHub Action proporciona un análisis automatizado (Antivirus) integrado directamente en tu pipeline de Integración Continua (CI). Escanea los archivos de tu repositorio en busca de firmas maliciosas y patrones sospechosos. Si se detectan amenazas, el pipeline fallará automáticamente, previniendo que código malicioso sea integrado o desplegado.
 
-- **Motor ClamAV Integrado:** Escaneo profundo basado en firmas de malware y actualización automática de base de datos de virus mediante `freshclam`.
-- **Análisis bajo demanda:** Escaneos rápidos, completos y personalizados por carpetas específicas.
-- **Protección Activa (Background):** Servicio residente en memoria que monitorea cambios del disco (`chokidar`) para detectar descargas maliciosas en tiempo real.
-- **Bóveda de Cuarentena:** Aislamiento seguro de amenazas detectadas y posibilidad de restaurar "falsos positivos" de forma transparente.
-- **Trazabilidad Inmutable:** Registro histórico de escaneos guardado en una base de datos local ultra rápida SQLite (`better-sqlite3`).
-- **Interfaz "Frameless" Moderna:** UI construida con React, Tailwind CSS y Lucide Icons para una experiencia intuitiva, incluyendo soporte a temas oscuros.
+## 🚀 Uso
 
-## Arquitectura del Proyecto 🏗️
+Para utilizar esta Action en tu repositorio, crea un archivo YAML en tu directorio `.github/workflows/` (por ejemplo, `.github/workflows/antivirus.yml`) y añade el siguiente contenido:
 
-El proyecto acata el modelo multi-proceso de Electron, garantizando aislamiento de seguridad:
-- **Renderer Process:** Construido con **React 19** y **Vite**. Gestiona toda la interfaz y experiencia de usuario.
-- **Main Process:** Construido con **Node.js** y **Electron**. Gestiona llamadas al sistema operativo, manipula la base de datos local `rustguard.db` e invoca los binarios `clamscan.exe` en segundo plano.
-- **Preload (Context Bridge):** Asegura que la interfaz visual no tenga acceso directo ni permisos sobre el disco duro (Comunicación IPC Asíncrona estricta).
+```yaml
+name: Escaneo Antivirus
 
-## Requisitos del Sistema 💻
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
-- **Entorno de Producción:** Windows 10/11, macOS, o Linux.
-- **Entorno de Desarrollo:** Node.js v22 o superior.
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Hacer checkout del código
+      - name: Checkout del repositorio
+        uses: actions/checkout@v3
 
-## Instrucciones de Desarrollo 🛠️
+      # 2. Ejecutar el Antivirus
+      - name: Ejecutar DevSecOps Antivirus
+        uses: UPT-FAING-EPIS/proyecto-si784-2026-i-u2-antivirus_cds@main
+```
 
-Si deseas contribuir o probar el proyecto en tu entorno local:
+## 🛠️ Cómo Funciona
 
-1. **Clonar el repositorio:**
-   ```bash
-   git clone <url-de-tu-repositorio>
-   cd proyecto-si784-2026-i-u2-antivirus_cds
-   ```
+1. **Clean Architecture:** El motor de escaneo está completamente aislado de interfaces gráficas y construido en Python.
+2. **Contenerización:** Se ejecuta de forma segura e inmutable dentro de un contenedor Docker (`python:3.10-slim`).
+3. **Exit Codes:** Responde de forma nativa a GitHub Actions. Si detecta una amenaza, retorna `Exit Code 1` (fallando el job). Si está limpio, retorna `Exit Code 0` (pasando el job).
 
-2. **Instalar las dependencias:**
-   ```bash
-   npm install
-   ```
+## 📝 Firmas Soportadas
 
-3. **Ejecutar en modo Desarrollo (Hot-Reload de Vite + Electron):**
-   ```bash
-   npm start
-   # o
-   npm run dev
-   ```
+Actualmente, el motor de análisis heurístico y de firmas (`scanner.py`) detecta:
+- Archivos de prueba EICAR
+- Patrones de ofuscación comunes (ej: `eval(base64.b64decode(...))`)
+- Posibles WebShells (ej: `<?php system($_GET[...`)
 
-4. **Empaquetar para Producción (Crear Instalador ejecutable):**
-   ```bash
-   npm run dist
-   ```
-
-## Integración Continua y Pruebas 🧪
-
-Este proyecto cuenta con flujos automatizados de GitHub Actions (`.github/workflows/`) para asegurar la calidad de código:
-- Pruebas Unitarias (Jest).
-- Pruebas de Interfaz (Playwright) con captura de video.
-- Análisis de Vulnerabilidades Estáticas (Snyk, Semgrep).
-- Reportes de Mutación (Stryker).
-- Empaquetado automático de Releases.
-
-## Documentación y Wiki 📖
-
-Para mayor información técnica, revisa la carpeta `Informes/` en este repositorio, que incluye:
-- Informes de Factibilidad, Visión y Arquitectura.
-- Diccionario de Datos (SQLite).
-- Estándar de Programación y Reglas de ESLint.
-- Criterios de Aceptación y Pruebas BDD (Gherkin).
-
-También puedes consultar la **Wiki** oficial (disponible en la carpeta `Informes/Wiki/`).
-
----
-
-**Desarrollado para:** Universidad Privada de Tacna - Facultad de Ingeniería - Escuela Profesional de Ingeniería de Sistemas.  
-**Curso:** Calidad y Pruebas de Software (2026).  
-**Autores:** LLica Mamani, Jimmy Mijair & Sierra Ruiz, Iker Alberto.
+Puedes extender el archivo `scanner.py` para añadir expresiones regulares o integrarlo con librerías externas como Yara.

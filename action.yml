@@ -1,0 +1,7 @@
+name: 'DevSecOps Antivirus'
+description: 'Escanea el repositorio en busca de malware y firmas maliciosas, deteniendo el pipeline si se detectan amenazas.'
+author: 'DevSecOps Team'
+
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
