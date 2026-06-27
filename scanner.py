@@ -1,34 +1,117 @@
 import os
+import re
+from typing import Optional
 
-def analizar_archivo(ruta_absoluta: str) -> bool:
+# ─────────────────────────────────────────────────────────────────────
+# Firma EICAR estándar (el estándar internacional para probar antivirus)
+# ─────────────────────────────────────────────────────────────────────
+EICAR_SIGNATURE = "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
+
+# ─────────────────────────────────────────────────────────────────────
+# Firma personalizada de RustGuard para pruebas propias
+# ─────────────────────────────────────────────────────────────────────
+RUSTGUARD_SIGNATURE = "RUSTGUARD-TEST-SIGNATURE-12345"
+
+# ─────────────────────────────────────────────────────────────────────
+# Extensiones de ejecutables peligrosos que no deberían estar en repos
+# ─────────────────────────────────────────────────────────────────────
+EXTENSIONES_PELIGROSAS = [
+    '.exe', '.scr', '.pif', '.com', '.bat', '.cmd', '.vbs', '.vbe',
+    '.js.exe', '.ws', '.wsf', '.msi', '.dll', '.cpl', '.hta',
+]
+
+# ─────────────────────────────────────────────────────────────────────
+# Patrones regex para detección heurística de código malicioso
+# ─────────────────────────────────────────────────────────────────────
+PATRONES_MALICIOSOS = [
+    # Ofuscación en Python
+    (r'eval\s*\(\s*base64\.b64decode\s*\(', "Ofuscación Python: eval(base64.b64decode(...))"),
+    (r'exec\s*\(\s*base64\.b64decode\s*\(', "Ofuscación Python: exec(base64.b64decode(...))"),
+    (r'eval\s*\(\s*compile\s*\(', "Ofuscación Python: eval(compile(...))"),
+
+    # WebShells PHP
+    (r'<\?php\s+.*system\s*\(\s*\$_(GET|POST|REQUEST)\s*\[', "WebShell PHP: system($_GET/POST[...])"),
+    (r'<\?php\s+.*exec\s*\(\s*\$_(GET|POST|REQUEST)\s*\[', "WebShell PHP: exec($_GET/POST[...])"),
+    (r'<\?php\s+.*passthru\s*\(\s*\$_(GET|POST|REQUEST)\s*\[', "WebShell PHP: passthru($_GET/POST[...])"),
+    (r'<\?php\s+.*shell_exec\s*\(\s*\$_(GET|POST|REQUEST)\s*\[', "WebShell PHP: shell_exec($_GET/POST[...])"),
+    (r'<\?php\s+.*eval\s*\(\s*\$_(GET|POST|REQUEST)\s*\[', "WebShell PHP: eval($_GET/POST[...])"),
+
+    # Ofuscación JavaScript
+    (r'eval\s*\(\s*atob\s*\(', "Ofuscación JS: eval(atob(...))"),
+    (r'eval\s*\(\s*unescape\s*\(', "Ofuscación JS: eval(unescape(...))"),
+
+    # PowerShell malicioso
+    (r'powershell\s+.*-enc(odedcommand)?\s+[A-Za-z0-9+/=]{20,}', "PowerShell con comando codificado"),
+    (r'Invoke-Expression\s*\(\s*\(New-Object', "PowerShell: Invoke-Expression con descarga remota"),
+
+    # Conexiones reversas (reverse shells)
+    (r'/bin/(ba)?sh\s+-i\s+>&\s*/dev/tcp/', "Reverse Shell: bash /dev/tcp"),
+    (r'nc\s+-[a-z]*e\s+/bin/(ba)?sh', "Reverse Shell: netcat"),
+]
+
+# ─────────────────────────────────────────────────────────────────────
+# Detección de doble extensión sospechosa (ej: factura.pdf.exe)
+# ─────────────────────────────────────────────────────────────────────
+EXTENSIONES_EJECUTABLES = {'.exe', '.scr', '.pif', '.com', '.bat', '.cmd', '.vbs', '.hta', '.msi'}
+EXTENSIONES_DOCUMENTO = {'.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.jpg', '.png', '.txt', '.csv'}
+
+
+def detectar_doble_extension(nombre_archivo: str) -> Optional[str]:
+    """
+    Detecta si un archivo tiene doble extensión sospechosa.
+    Ejemplo: 'factura.pdf.exe' -> la extensión real es .exe pero se disfraza de .pdf
+    Retorna la descripción de la amenaza o None si está limpio.
+    """
+    nombre = nombre_archivo.lower()
+    # Obtener todas las extensiones del archivo
+    parts = nombre.split('.')
+    if len(parts) >= 3:
+        ext_real = '.' + parts[-1]       # La extensión real (última)
+        ext_falsa = '.' + parts[-2]      # La extensión que finge ser
+        if ext_real in EXTENSIONES_EJECUTABLES and ext_falsa in EXTENSIONES_DOCUMENTO:
+            return f"Doble extensión sospechosa: se disfraza de '{ext_falsa}' pero es '{ext_real}'"
+    return None
+
+
+def analizar_archivo(ruta_absoluta: str) -> Optional[dict]:
     """
     Analiza un archivo en busca de firmas maliciosas.
-    Devuelve True si detecta una amenaza (malware), False si está limpio.
+    Devuelve un dict con detalles de la amenaza si detecta malware, o None si está limpio.
+
+    Retorno ejemplo: {"tipo": "EICAR", "detalle": "Firma EICAR estándar detectada"}
     """
-    # Método 1: Detección por extensión de archivo
-    # Si el desarrollador sube un archivo con estas extensiones, lo bloqueamos.
-    extensiones_bloqueadas = ['.malicioso', '.virus', '.ransomware']
-    
-    for ext in extensiones_bloqueadas:
-        if ruta_absoluta.lower().endswith(ext):
-            return True
+    nombre_archivo = os.path.basename(ruta_absoluta)
 
-    # Método 2: Detección por firma interna (Análisis heurístico básico)
-    # Buscamos una cadena de texto específica que simula ser el código de un virus.
-    firma_virus_prueba = "RUSTGUARD-TEST-SIGNATURE-12345"
+    # ── CHECK 1: Doble extensión sospechosa ──────────────────────────
+    amenaza_doble_ext = detectar_doble_extension(nombre_archivo)
+    if amenaza_doble_ext:
+        return {"tipo": "Doble Extensión", "detalle": amenaza_doble_ext}
 
+    # ── CHECK 2: Extensiones de ejecutables peligrosos ───────────────
+    for ext in EXTENSIONES_PELIGROSAS:
+        if nombre_archivo.lower().endswith(ext):
+            return {"tipo": "Ejecutable Peligroso", "detalle": f"Extensión bloqueada: '{ext}'"}
+
+    # ── CHECK 3: Análisis de contenido (firmas + heurística) ─────────
     try:
-        # Intentamos leer el archivo como texto plano
-        with open(ruta_absoluta, 'r', encoding='utf-8') as archivo:
+        with open(ruta_absoluta, 'r', encoding='utf-8', errors='ignore') as archivo:
             contenido = archivo.read()
-            if firma_virus_prueba in contenido:
-                return True
-    except UnicodeDecodeError:
-        # Si el archivo es un binario (ej. una imagen o un .exe) y no se puede leer como texto, 
-        # pasamos de largo en esta prueba básica para evitar que el script falle.
-        pass
-    except Exception as e:
-        print(f"No se pudo analizar el archivo {ruta_absoluta}: {e}")
 
-    # Si pasa las pruebas, el archivo está limpio
-    return False
+            # Check 3a: Firma EICAR
+            if EICAR_SIGNATURE in contenido:
+                return {"tipo": "EICAR", "detalle": "Firma EICAR estándar detectada (test antivirus)"}
+
+            # Check 3b: Firma personalizada RustGuard
+            if RUSTGUARD_SIGNATURE in contenido:
+                return {"tipo": "RustGuard Signature", "detalle": "Firma de prueba RustGuard detectada"}
+
+            # Check 3c: Patrones heurísticos (regex)
+            for patron, descripcion in PATRONES_MALICIOSOS:
+                if re.search(patron, contenido, re.IGNORECASE | re.DOTALL):
+                    return {"tipo": "Heurístico", "detalle": descripcion}
+
+    except Exception as e:
+        print(f"  [!] Advertencia: No se pudo leer '{nombre_archivo}': {e}")
+
+    # Si pasa todas las pruebas, el archivo está limpio
+    return None

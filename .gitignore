@@ -37,6 +37,13 @@ bin/*.exe
 bin/*.bin
 bin/clamav/
 
+# Python cache
+__pycache__/
+*.pyc
+
+# Local test script
+test_local.py
+
 # Test reports
 reports/
 playwright-report/
