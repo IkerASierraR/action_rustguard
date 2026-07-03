@@ -36,6 +36,11 @@ PATRONES_MALICIOSOS = [
     (r'<\?php\s+.*shell_exec\s*\(\s*\$_(GET|POST|REQUEST)\s*\[', "WebShell PHP: shell_exec($_GET/POST[...])"),
     (r'<\?php\s+.*eval\s*\(\s*\$_(GET|POST|REQUEST)\s*\[', "WebShell PHP: eval($_GET/POST[...])"),
 
+    # Ofuscación PHP con base64
+    (r'eval\s*\(\s*base64_decode\s*\(', "Ofuscación PHP: eval(base64_decode(...))"),
+    (r'exec\s*\(\s*base64_decode\s*\(', "Ofuscación PHP: exec(base64_decode(...))"),
+    (r'system\s*\(\s*base64_decode\s*\(', "Ofuscación PHP: system(base64_decode(...))"),
+
     # Ofuscación JavaScript
     (r'eval\s*\(\s*atob\s*\(', "Ofuscación JS: eval(atob(...))"),
     (r'eval\s*\(\s*unescape\s*\(', "Ofuscación JS: eval(unescape(...))"),
@@ -47,6 +52,43 @@ PATRONES_MALICIOSOS = [
     # Conexiones reversas (reverse shells)
     (r'/bin/(ba)?sh\s+-i\s+>&\s*/dev/tcp/', "Reverse Shell: bash /dev/tcp"),
     (r'nc\s+-[a-z]*e\s+/bin/(ba)?sh', "Reverse Shell: netcat"),
+
+    # ─── Ejecución de Payloads Remotos (descarga + ejecución) ────
+    (r'curl\s+.*\|\s*(ba)?sh', "Ejecución remota: curl pipe a shell"),
+    (r'wget\s+.*\|\s*(ba)?sh', "Ejecución remota: wget pipe a shell"),
+    (r'curl\s+.*\|\s*python', "Ejecución remota: curl pipe a python"),
+    (r'wget\s+.*-O-\s*\|\s*(ba)?sh', "Ejecución remota: wget -O- pipe a shell"),
+    (r'wget\s+.*&&\s*chmod\s+\+x', "Ejecución remota: wget + chmod +x"),
+    (r'curl\s+.*-o\s+\S+\s*&&\s*chmod\s+\+x', "Ejecución remota: curl -o + chmod +x"),
+    (r'Invoke-WebRequest\s+.*\|\s*Invoke-Expression', "PowerShell: descarga y ejecución remota (IWR|IEX)"),
+    (r'iwr\s+.*\|\s*iex', "PowerShell: iwr pipe a iex"),
+]
+
+# ─────────────────────────────────────────────────────────────────────
+# Patrones de fuga de credenciales (Secret Scanning)
+# ─────────────────────────────────────────────────────────────────────
+PATRONES_CREDENCIALES = [
+    # Llaves privadas
+    (r'-----BEGIN (RSA |DSA |EC |OPENSSH )?PRIVATE KEY-----', "Llave privada expuesta en el código"),
+
+    # Tokens de servicios cloud
+    (r'AKIA[0-9A-Z]{16}', "AWS Access Key ID expuesto"),
+
+    # Contraseñas hardcodeadas
+    (r'(?i)(password|passwd|pwd)\s*[=:]\s*["\'][^"\']{4,}["\']', "Contraseña hardcodeada en el código"),
+
+    # API Keys genéricas
+    (r'(?i)(api_key|apikey|api_secret)\s*[=:]\s*["\'][^"\']{8,}["\']', "API Key expuesta en el código"),
+
+    # Secret Keys
+    (r'(?i)(secret_key|secret)\s*[=:]\s*["\'][^"\']{8,}["\']', "Secret Key expuesta en el código"),
+
+    # Tokens de acceso genéricos
+    (r'(?i)token\s*[=:]\s*["\'][A-Za-z0-9_\-\.]{20,}["\']', "Token de acceso expuesto en el código"),
+
+    # Tokens específicos de plataformas
+    (r'ghp_[A-Za-z0-9]{36}', "GitHub Personal Access Token expuesto"),
+    (r'sk-[A-Za-z0-9]{32,}', "API Key de OpenAI expuesta"),
 ]
 
 # ─────────────────────────────────────────────────────────────────────
@@ -109,6 +151,11 @@ def analizar_archivo(ruta_absoluta: str) -> Optional[dict]:
             for patron, descripcion in PATRONES_MALICIOSOS:
                 if re.search(patron, contenido, re.IGNORECASE | re.DOTALL):
                     return {"tipo": "Heurístico", "detalle": descripcion}
+
+            # Check 3d: Fuga de credenciales (Secret Scanning)
+            for patron, descripcion in PATRONES_CREDENCIALES:
+                if re.search(patron, contenido):
+                    return {"tipo": "Credencial Expuesta", "detalle": descripcion}
 
     except Exception as e:
         print(f"  [!] Advertencia: No se pudo leer '{nombre_archivo}': {e}")
